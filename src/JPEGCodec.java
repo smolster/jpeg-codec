@@ -1,6 +1,7 @@
 public class JPEGCodec {
 	
 	private int N; // Macroblock size
+	private int quality;
 	private DCT dct;
 	private Quantize quant;
 	private Huffman huff;
@@ -10,6 +11,10 @@ public class JPEGCodec {
 		this.dct = new DCT(N);
 		this.quant = new Quantize(N, quality);
 		this.huff = new Huffman(N);
+		
+		if (quality > 100) quality = 100;
+		if (quality < 1) quality = 1;
+		this.quality = quality;
 	}
 	
 	public void setBlockSize(int blockSize) {
@@ -20,33 +25,40 @@ public class JPEGCodec {
 	}
 	
 	public void setQuality(int quality) {
+		if (quality > 100) quality = 100;
+		if (quality < 1) quality = 1;
+		this.quality = quality;
 		quant.setQuality(quality);
 	}
 	
-	public void encodeImage(String filepathIn, String filepathOut, int quality, int blockSize) {
-		setBlockSize(blockSize);
-		ImageHandler h = new ImageHandler();
-		int[][] pixels = h.getPixels(filepathIn);
-		if (pixels == null) {
-			System.out.println("Could not load pixels from " + filepathIn + ". Terminating.");
-			return;
-		}
+	public int getBlockSize() {
+		return this.N;
+	}
+	
+	public int getQuality() {
+		return this.quality;
+	}
+	
+	public MyImage encodeImage(MyImage imgIn, int blockSize, int quality) {
+		this.setQuality(quality);
+		this.setBlockSize(blockSize);
 		
-		MyImage image = new MyImage(pixels, blockSize);
+		return encodeImage(imgIn);
+	}
+	
+	public MyImage encodeImage(MyImage imgIn) {
+		MyImage imgOut = new MyImage(JPEGCodec.getEmptyPixels(imgIn.trueWidth, imgIn.trueHeight), this.N);
 		
-		MyImage imageOut = new MyImage(JPEGCodec.getEmptyPixels(image.trueWidth ,image.trueHeight), blockSize);
-		
-		for (int x = 0; x < image.widthInBlocks; x++) {
-			for (int y = 0; y < image.heightInBlocks; y++) {
-				int[][] in = image.getMacroblock(x, y);
+		for (int x = 0; x < imgIn.widthInBlocks; x++) {
+			for (int y = 0; y < imgIn.heightInBlocks; y++) {
+				int[][] in = imgIn.getMacroblock(x, y);
 				
 				int[][] out = decodeBlock(encodeBlock(in));
 				
-				imageOut.setMacroblock(x, y, out);
+				imgOut.setMacroblock(x, y, out);
 			}
 		}
-		
-		h.writeToFile(imageOut.getPixels(), filepathOut);
+		return imgOut;
 	}
 	
 	private int[] encodeBlock(int[][] in) {
@@ -57,11 +69,15 @@ public class JPEGCodec {
 		
 		int[] huffmanArray = huff.zigZag(quantizedBlock);
 		
+		//TODO: Huffman encode.
+		
 		return huffmanArray;
 	}
 	
-	public int[][] decodeBlock(int[] huffmanArrray) {
-		int[][] quantizedBlock = huff.unZigZag(huffmanArrray);
+	public int[][] decodeBlock(int[] huffmanArray) {
+		//TODO: Huffman decode.
+		
+		int[][] quantizedBlock = huff.unZigZag(huffmanArray);
 		
 		int[][] dctBlock = quant.dequantize(quantizedBlock);
 

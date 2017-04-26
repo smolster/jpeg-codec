@@ -22,7 +22,7 @@ public class DCT {
 				if (x == 0 || y == 0)
 					c[x][y] = Math.sqrt(2)/N;
 				else
-					c[x][y] = 2/N;
+					c[x][y] = 2.0/N;
 			}
 		}
 		c[0][0] = 1.0/N;

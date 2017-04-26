@@ -8,8 +8,6 @@ public class Quantize {
 	public Quantize(int blockSize, int quality) {
 		this.N = blockSize;
 		setQuality(quality);
-		
-		initQuantMatrix();
 	}
 	
 	/* This scaling function taken from the JPEG 6b libraries. */
@@ -22,6 +20,8 @@ public class Quantize {
 			this.quality = 5000 / quality;
 		else
 			this.quality = 200 - quality*2;
+		
+		initQuantMatrix();
 	}
 	
 	private void initQuantMatrix() {
@@ -34,9 +34,9 @@ public class Quantize {
 				if (x < 8 && y < 8) {
 					quantMatrix[x][y] = stQuant[x][y];
 				} else if (x >= 8 && y < 8) {
-					quantMatrix[x][y] = stQuant[7][y] + 15*(8-x+1);
+					quantMatrix[x][y] = stQuant[7][y] + 15*(Math.abs(8-x)+1);
 				} else if (x < 8 && y >= 8) {
-					quantMatrix[x][y] = stQuant[x][7] + 15*(8-y+1);
+					quantMatrix[x][y] = stQuant[x][7] + 15*(Math.abs(8-y)+1);
 				} else {
 					quantMatrix[x][y] = ((quantMatrix[x-1][y] + quantMatrix[x][y-1])/2) + 15;
 				}
@@ -91,8 +91,9 @@ public class Quantize {
 		int[][] out = new int[N][N];		
 		
 		for (int i = 0; i < N; i++)
-			for (int j = 0; j < N; j++)
+			for (int j = 0; j < N; j++) {
 				out[i][j] = (int) ( Math.round( (in[i][j] / ( (int) (quantMatrix[i][j]))) ));
+			}
 		
 		return out;
 	}

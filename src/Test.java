@@ -6,21 +6,24 @@ public class Test {
 
 	MyImage image;
 	JPEGCodec codec;
-	ImageHandler h;
+	FileHandler h;
 	String filenameIn;
 	DecimalFormat df; // Used for pretty-printing ratios
+	DecimalFormat df2;
 	
 	public Test(String filename) {
 		this.filenameIn = filename;
 		this.codec = new JPEGCodec(8, 100);
-		this.h = new ImageHandler();
+		this.h = new FileHandler();
 		int[][] tmp = h.getPixels("resources/" + filename);
 		if (tmp == null)
 			System.out.println("Test pixels not initialized.");
 		else image = new MyImage(tmp, 8);
 		
-		this.df = new DecimalFormat("#.###");
+		this.df = new DecimalFormat("##.##");
+		this.df2 = new DecimalFormat("#.###");
 		df.setRoundingMode(RoundingMode.CEILING);
+		df2.setRoundingMode(RoundingMode.CEILING);
 	}
 	
 	//TODO: Add ratios/diffs for each encode/decode pair steps. (e.g. compare dct & dequantized blocks)
@@ -41,25 +44,23 @@ public class Test {
 			int[][] in = image.getMacroblock(image.widthInBlocks/2, image.heightInBlocks/2);
 			
 			int[][] dctBlock = in;
-			if (testDCT)
+			if (testDCT) {
 				dctBlock = dct.forwardDCT(in);
+				if (printArrays)
+					printArray("DCT", dctBlock);
+			}
 			
 			int[][] quantizedBlock = dctBlock;
 			if (testQuantize)
 				quantizedBlock = quant.quantize(dctBlock);
 			
-			//TODO: Remove this.
-			if (printArrays){
-				Test.printArray("Quantized", quantizedBlock);
-				System.out.println();
-			}
 			
 			int[][] huffmanBlock = quantizedBlock;
-			int[][] deHuffmanBlock = huffmanBlock;
 			if (testHuffman) {
 				//TODO: Huffman encode
 				//TODO: Huffman decode
 			}
+			int[][] deHuffmanBlock = huffmanBlock;
 			
 			int[][] dequantizedBlock = deHuffmanBlock;
 			if (testQuantize)
@@ -86,15 +87,15 @@ public class Test {
 		}
 	}
 
-	//TODO: Add parameter for image
-	public void testSingleImage(int maxBlockSize, int quality, boolean testDCT, boolean testQuantize, boolean testHuffman, boolean isRegression, String filepath, MyImage img) {
+	public void testSingleImage(int maxBlockSize, int quality, boolean testDCT, boolean testQuantize, boolean testHuffman,
+									boolean isRegression, String filepath, MyImage img) {
 		if (!isRegression) {
-			System.out.println("Testing full encode/decode with options: ");
-			System.out.println("Test DCT:\t" + ((testDCT) ? "ON" : "OFF"));
-			System.out.println("Test Quantize:\t" + ((testQuantize) ? "ON" : "OFF"));
-			System.out.println("Test Huffman:\t" + ((testHuffman) ? "ON" : "OFF"));
+			h.log("Testing full encode/decode with options: ", true);
+			h.log("Test DCT:\t" + ((testDCT) ? "ON" : "OFF"), true);
+			h.log("Test Quantize:\t" + ((testQuantize) ? "ON" : "OFF"), true);
+			h.log("Test Huffman:\t" + ((testHuffman) ? "ON" : "OFF"), true);
 		}
-			
+		
 		MyImage imageToUse = this.image;
 		if (img != null)
 			imageToUse = img;
@@ -109,15 +110,17 @@ public class Test {
 		Huffman huff = new Huffman(4);
 		
 		for (int i = 4; i <= maxBlockSize; i+=4) {
+			
+			long startTime = System.nanoTime();
+			
 			dct.setBlockSize(i);
 			quant.setBlockSize(i);
 			huff.setBlockSize(i);
 			imageToUse.setBlockSize(i);
 			
-			MyImage imageOut = new MyImage(Test.getEmptyPixels(imageToUse.trueWidth, imageToUse.trueHeight), i);
+			MyImage imageOut = new MyImage(JPEGCodec.getEmptyPixels(imageToUse.trueWidth, imageToUse.trueHeight), i);
 			
 			double sumMacroblockAverageRatios = 0.0;
-			double sumMacroblockAverageDiffs = 0.0;
 			double sumMacroblockAverageNumZeroes = 0.0;
 			
 			for (int x = 0; x < imageToUse.widthInBlocks; x++) {
@@ -140,7 +143,8 @@ public class Test {
 					if (testQuantize)
 						dequantizedBlock = quant.dequantize(deHuffmanBlock);
 					
-					int[][] out= dequantizedBlock;
+					int[][] out = dequantizedBlock;
+					
 					if (testDCT)
 						out = dct.reverseDCT(dequantizedBlock);
 					
@@ -148,74 +152,37 @@ public class Test {
 					
 					sumMacroblockAverageNumZeroes += Test.percentageZeroes(huffmanArray);
 					sumMacroblockAverageRatios += Test.avgRatioArrays(in, out);
-					sumMacroblockAverageDiffs += Test.avgDiffArrays(in, out);
 					
 				}
 			}
 			
-			double averagePercentageZeroes = sumMacroblockAverageNumZeroes / (imageToUse.widthInBlocks*imageToUse.heightInBlocks);
+			long endTime = System.nanoTime();
+			double runTime = (double) (endTime-startTime); // This is now in seconds
+			runTime /= 1000000000.0;
+			
+			double averagePercentageZeroes = 100.0 * (sumMacroblockAverageNumZeroes / (imageToUse.widthInBlocks*imageToUse.heightInBlocks));
 			double averageMacroblockRatio = sumMacroblockAverageRatios / (imageToUse.widthInBlocks*imageToUse.heightInBlocks);
-			double averageMacroblockDiff = sumMacroblockAverageDiffs / (imageToUse.widthInBlocks*imageToUse.heightInBlocks);
 
-			System.out.print("Blocksize " + i + "\t-- Avg. Diff: " + df.format(averageMacroblockDiff) +
-								"\tAvg. Ratio: " + df.format(averageMacroblockRatio) + "\tAvg. % Zero: " + 
-									df.format(averagePercentageZeroes));
+			h.log("Blocksize " + i + ":  Avg. % Zero: " + df.format(averagePercentageZeroes) + " \tRun Time: " + df.format(runTime), false);
 			if (averageMacroblockRatio >= .90 && averageMacroblockRatio <= 1.10)
-				System.out.print(" -- ACCEPTED.");
-			System.out.println();
+				h.log(" -- ACCEPTED.", true);
+			else h.log("", true);
 			String filenameOut;
+			
 			if (isRegression)
-				filenameOut = "test/fullregressiontest2/" + filepath + "-OUT-" + i + ".jpg";
+				filenameOut = "test/fullregressiontest/" + filepath + "-OUT-" + i + ".png";
 			else
-				filenameOut = "test/singleimagetest/" + filenameIn + "-OUT-" + i + ".jpg";
+				filenameOut = "test/singleimagetest/" + filenameIn + "-OUT-" + i + ".png";
+	
 			h.writeToFile(imageOut.getPixels(), filenameOut);
-			
 		}
 	}
-	
-	public void testZigZag(int maxBlockSize, boolean print) {
-		System.out.println("Testing zig-zag functionality...");
-		Huffman huff = new Huffman(4);
-		
-		for (int i = 4; i <= maxBlockSize; i+=4) {
-			System.out.print("Blocksize " + i + " -- ");
-			huff.setBlockSize(i);
-			image.setBlockSize(i);
-			
-			int[][] in = image.getMacroblock(image.widthInBlocks/2, image.heightInBlocks/2);
-			int[] zz = huff.zigZag(in);
-			int[][] out = huff.unZigZag(zz);
-			
-			boolean foundError = false;
-			for (int x = 0; x < i; x++) {
-				for (int y = 0; y < i; y++)
-					if (in[x][y] != out[x][y]) {
-						if (!foundError) {
-							System.out.print("Found error.\n");
-							foundError = true;
-						}
-						System.out.println("Error at x = " + x + ", y = " + y);
-					}
-			}
-			
-			if (!foundError) {
-				System.out.print("ACCEPTED.\n");
-			}
-			
-			if (print) {
-				Test.printArray("INPUT", in);
-				System.out.println();
-				
-				Test.printArray("ZigZag", zz);
-				System.out.println();
-				
-				Test.printArray("OUTPUT", out);
-			}
-		}
-	}
-	
+
 	public void fullRegressionTest(int maxBlockSize, int quality, boolean print) {
-		System.out.println("Running full regression test.");
+		h.clearOutputLog();
+		h.log("Running full regression test with:", true);
+		h.log("  - Max block size: " + maxBlockSize, true);
+		h.log("  - Quality: " + quality, true);
 		
 		for (int i = 1; i <= 10; i++) {
 			String filename = "img" + i + ".jpg";
@@ -226,19 +193,17 @@ public class Test {
 			int[][] pixels = h.getPixels(inputPath);
 			if (pixels == null) {
 				if (print)
-					System.out.println("Error loading file. Skipping.");
+					h.log("Error loading file. Skipping.", true);
 				continue;
 			} else if (print) {
-				System.out.println("Successfully loaded pixels. W: " + pixels.length + "\tH: " + pixels[0].length);
+				h.log("Successfully loaded pixels. W: " + pixels.length + "\tH: " + pixels[0].length, true);
 			}
 			
 			MyImage img = new MyImage(pixels, 4);
 			this.testSingleImage(maxBlockSize, quality, true, true, true, true, filename, img);
-			System.out.println("Done.");
+			h.log("Done.", true);
 		}
 	}
-	
-	/* Helper Methods */
 	
 	/* Helper Methods */
 	
@@ -265,7 +230,6 @@ public class Test {
 		return Math.abs(avgRatio);
 	}
 	
-	
 	private static int avgDiffArrays(int[][] a, int[][] b) {
 		if (a.length != b.length || a[0].length != b[0].length) { // Incompatible.
 			return Integer.MAX_VALUE;
@@ -283,45 +247,6 @@ public class Test {
 		return avgDiff;
 	}
 	
-	
-	public static void printArray(String title, double[][] in) {
-		System.out.println(title);
-		for (int i = 0; i < in.length; i++) {
-			for (int j = 0; j < in.length; j++) {
-				System.out.print(in[i][j] + "\t");
-			}
-			System.out.println();
-		}
-	}
-	
-	public static void printArray(String title, int[][] in) {
-
-		System.out.println(title);
-		for (int i = 0; i < in.length; i++) {
-			for (int j = 0; j < in.length; j++) {
-				System.out.print(in[i][j] + "\t");
-			}
-			System.out.println();
-		}
-	}
-	
-	public static void printArray(String title, int[] in) {
-		for (int i = 0; i < in.length; i++) {
-			System.out.print(in[i] + "\t");
-		}
-		System.out.print("\n");
-	}
-	
-	private static int[][] getEmptyPixels(int w, int h) {
-		int[][] pixels = new int[w][h];
-		
-		for (int x = 0; x < w; x++)
-			for (int y = 0; y < h; y++)
-				pixels[x][y] = 0;
-		
-		return pixels;
-	}
-	
 	private static double percentageZeroes(int[] in) {
 		double numZeroes = 0.0;
 		
@@ -332,8 +257,13 @@ public class Test {
 		return numZeroes/((double) in.length);
 	}
 	
-	public static void main(String[] args) {
-		Test t = new Test("img1.jpg");
-		t.fullRegressionTest(16, 100, true);;
-	}
+	public static void printArray(String title, int[][] in) {
+		System.out.println(title);
+		for (int x = 0; x < in.length; x++) {
+			for (int y = 0; y < in.length; y++) {
+				System.out.print(in[y][x] + "\t");
+			}
+			System.out.println();
+		}
+	}	
 }
